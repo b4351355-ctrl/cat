@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { GameItem, ItemType } from '../types';
-import { ITEMS, POSITIVE_FEEDBACKS, NEGATIVE_FEEDBACKS, INITIAL_TIME_SECONDS, TIME_BONUS_MS, TIME_PENALTY_MS } from '../constants';
+import { 
+  ITEMS, POSITIVE_FEEDBACKS, NEGATIVE_FEEDBACKS, INITIAL_TIME_SECONDS, 
+  BASE_TIME_BONUS_MS, MIN_TIME_BONUS_MS, TIME_DECAY_PER_POINT, TIME_PENALTY_MS 
+} from '../constants';
 import { Volume2, VolumeX, Zap } from 'lucide-react';
 import { speak, playSuccessSound, playErrorSound } from '../utils/audio';
 
@@ -21,6 +24,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onGameOver }) => {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [feedbackType, setFeedbackType] = useState<'success' | 'error' | null>(null);
   const [isMuted, setIsMuted] = useState(false);
+  const [pawState, setPawState] = useState<'idle' | 'left' | 'right'>('idle');
   
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isMutedRef = useRef(isMuted);
@@ -28,7 +32,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onGameOver }) => {
   // Helper: Weighted random selection
   const getRandomItems = () => {
     const allItems = Object.values(ITEMS);
-    // Shuffle array
     const shuffled = [...allItems].sort(() => 0.5 - Math.random());
     return [shuffled[0], shuffled[1]];
   };
@@ -37,19 +40,16 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onGameOver }) => {
 
   // Game Loop Logic (Next Round)
   const nextRound = useCallback(() => {
-    // 1. Pick two random items
     const [item1, item2] = getRandomItems();
     setLeftItem(item1);
     setRightItem(item2);
 
-    // 2. Pick one as target
     const isLeftTarget = Math.random() > 0.5;
     const newTarget = isLeftTarget ? item1.type : item2.type;
     setTargetItem(newTarget);
 
-    // 3. Speak
     if (!isMutedRef.current) {
-      speak(ITEMS[newTarget].label);
+      speak(ITEMS[newTarget].label, newTarget);
     }
   }, []);
 
@@ -67,7 +67,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onGameOver }) => {
           onGameOver(score);
           return 0;
         }
-        return prev - 100; // Decrement 100ms
+        return prev - 100;
       });
     }, 100);
 
@@ -76,8 +76,19 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onGameOver }) => {
     };
   }, [onGameOver, score]);
 
+  // Diminishing Return Logic
+  const calculateTimeBonus = (currentScore: number) => {
+    const decay = currentScore * TIME_DECAY_PER_POINT;
+    return Math.max(MIN_TIME_BONUS_MS, BASE_TIME_BONUS_MS - decay);
+  };
+
   const handleInteraction = (selectedType: ItemType) => {
     if (timeLeftMs <= 0) return;
+
+    // Paw Animation
+    setPawState(selectedType === leftItem.type ? 'left' : 'right');
+    // Reset paw after animation
+    setTimeout(() => setPawState('idle'), 200);
 
     if (selectedType === targetItem) {
       // Correct
@@ -87,18 +98,16 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onGameOver }) => {
       setCombo(newCombo);
       setScore(s => s + 1);
       
-      // Time Bonus (capped at 30s max to prevent infinite stalling)
-      setTimeLeftMs(prev => Math.min(prev + TIME_BONUS_MS, 30000));
+      // Dynamic Bonus Time
+      const bonus = calculateTimeBonus(score);
+      setTimeLeftMs(prev => Math.min(prev + bonus, 30000));
 
-      // Visual feedback
       const msg = POSITIVE_FEEDBACKS[Math.floor(Math.random() * POSITIVE_FEEDBACKS.length)];
       setFeedback(msg);
       setFeedbackType('success');
       
-      // Immediate next round for "addictive" flow
       nextRound(); 
       
-      // Clear feedback quickly
       setTimeout(() => {
         setFeedback(null);
         setFeedbackType(null);
@@ -108,17 +117,15 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onGameOver }) => {
       // Incorrect
       if (!isMuted) playErrorSound();
       
-      setCombo(0); // Break combo
-      setTimeLeftMs(prev => Math.max(0, prev - TIME_PENALTY_MS)); // Penalty
+      setCombo(0);
+      setTimeLeftMs(prev => Math.max(0, prev - TIME_PENALTY_MS));
 
       const msg = NEGATIVE_FEEDBACKS[Math.floor(Math.random() * NEGATIVE_FEEDBACKS.length)];
       setFeedback(msg);
       setFeedbackType('error');
 
-      // Re-speak correct target to nag the player
       if (!isMuted) {
-         // Tiny delay so it doesn't overlap perfectly with error buzzer
-         setTimeout(() => speak(ITEMS[targetItem].label), 200);
+         setTimeout(() => speak(ITEMS[targetItem].label, targetItem), 200);
       }
       
       setTimeout(() => {
@@ -135,7 +142,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onGameOver }) => {
       {/* Top Bar */}
       <div className="flex justify-between items-center p-4 bg-amber-200 text-amber-900 border-b-4 border-amber-300 z-20">
         <div className="flex flex-col">
-          <span className="text-xs uppercase font-bold tracking-wider opacity-70">得分 (Score)</span>
+          <span className="text-xs uppercase font-bold tracking-wider opacity-70">得分</span>
           <span className="text-3xl font-black">{score}</span>
         </div>
         
@@ -152,7 +159,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onGameOver }) => {
         </div>
 
         <div className="flex flex-col items-end">
-          <span className="text-xs uppercase font-bold tracking-wider opacity-70">时间 (Time)</span>
+          <span className="text-xs uppercase font-bold tracking-wider opacity-70">时间</span>
           <span className={`text-3xl font-black ${timeLeftMs < 5000 ? 'text-red-600 animate-pulse' : ''}`}>
             {(timeLeftMs / 1000).toFixed(1)}s
           </span>
@@ -163,30 +170,50 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onGameOver }) => {
       <div className="flex-1 flex flex-col items-center justify-center relative p-4 space-y-4">
         
         {/* The Prompt Bubble */}
-        <div className="w-full text-center z-10 mb-2">
+        <div className="w-full text-center z-10 mb-2 relative">
            <div className={`
-             inline-block bg-white border-4 rounded-3xl px-10 py-6 shadow-lg transform transition-transform
+             inline-block bg-white border-4 rounded-3xl px-10 py-6 shadow-lg transform transition-transform duration-100
              ${feedbackType === 'error' ? 'shake border-red-500 bg-red-50' : 'border-gray-800'}
              ${feedbackType === 'success' ? 'scale-105 border-green-500' : ''}
            `}>
              <p className="text-gray-400 text-xs font-bold mb-1 uppercase tracking-widest">Cat wants</p>
-             {/* Main Instruction */}
              <h2 className="text-5xl font-black text-gray-800 mb-1">
                {ITEMS[targetItem].label}
              </h2>
            </div>
         </div>
 
-        {/* The Cat Image */}
-        <div className="relative z-0">
-          <div className={`w-40 h-40 rounded-full border-8 border-white shadow-xl overflow-hidden bg-gray-200 mx-auto transition-transform ${feedbackType === 'error' ? 'shake grayscale' : ''}`}>
+        {/* Cat Area with Paw */}
+        <div className="relative w-full flex justify-center h-48 sm:h-56 z-0">
+          
+          {/* Cat Image Container - ensure full head visible */}
+          <div className={`
+            relative w-48 h-48 sm:w-56 sm:h-56 rounded-full border-8 border-white shadow-xl bg-gray-200 
+            transition-transform duration-100
+            ${feedbackType === 'error' ? 'shake grayscale' : ''}
+          `}>
             <img 
               src="https://picsum.photos/id/40/400/400" 
               alt="The Cat" 
-              className="w-full h-full object-cover"
+              className="w-full h-full object-cover rounded-full" 
             />
+            
+            {/* The Cat Paw */}
+            <div className={`
+                absolute -bottom-10 left-1/2 w-16 h-24 bg-white border-4 border-gray-300 rounded-full origin-top transition-transform duration-150 ease-out z-20 shadow-md
+                ${pawState === 'left' ? '-rotate-45 -translate-x-12' : ''}
+                ${pawState === 'right' ? 'rotate-45 translate-x-4' : ''}
+                ${pawState === 'idle' ? 'scale-0' : ''}
+            `} style={{ marginLeft: '-2rem' }}>
+                {/* Paw Pads */}
+                <div className="absolute top-2 left-1/2 -translate-x-1/2 w-8 h-6 bg-pink-300 rounded-full"></div>
+                <div className="absolute top-1 left-2 w-3 h-3 bg-pink-300 rounded-full"></div>
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3 h-3 bg-pink-300 rounded-full"></div>
+                <div className="absolute top-1 right-2 w-3 h-3 bg-pink-300 rounded-full"></div>
+            </div>
+
           </div>
-          
+
           {/* Feedback Overlay Text */}
           {feedback && (
             <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-64 text-center pointer-events-none pop-in z-30">
@@ -224,7 +251,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onGameOver }) => {
                 {item.subLabel}
             </span>
             
-            {/* Glossy Overlay */}
             <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-white/20 to-transparent rounded-t-3xl"></div>
             </button>
         ))}

@@ -1,12 +1,8 @@
-// Simple audio synthesizer using Web Audio API and SpeechSynthesis
+import { AUDIO_CONFIG } from '../constants';
+import { ItemType } from '../types';
 
 let audioCtx: AudioContext | null = null;
-
-// OPTIONAL: If you have real audio files, map the ItemType labels to URLs here.
-// Example: { '萝卜': '/audio/luobo.mp3' }
-const CUSTOM_AUDIO_MAP: Record<string, string> = {
-  // '萝卜': 'https://example.com/audio/carrot_girl_voice.mp3',
-};
+const audioCache: Record<string, HTMLAudioElement> = {};
 
 export const initAudio = () => {
   if (!audioCtx) {
@@ -15,9 +11,32 @@ export const initAudio = () => {
   if (audioCtx.state === 'suspended') {
     audioCtx.resume();
   }
+  // Preload audios if URLs are present
+  Object.values(AUDIO_CONFIG.ITEMS).forEach(url => {
+    if (url) {
+      const audio = new Audio(url);
+      audioCache[url] = audio;
+    }
+  });
+};
+
+const playFile = (url: string) => {
+  if (!url) return false;
+  try {
+    const audio = audioCache[url] || new Audio(url);
+    audio.currentTime = 0;
+    audio.play().catch(e => console.warn("Playback failed", e));
+    return true;
+  } catch (e) {
+    return false;
+  }
 };
 
 export const playSuccessSound = (comboPitch = 1.0) => {
+  // Try playing custom "Great" sound first
+  if (playFile(AUDIO_CONFIG.SOUND_CORRECT)) return;
+
+  // Fallback to synth
   if (!audioCtx) initAudio();
   if (!audioCtx) return;
 
@@ -42,6 +61,8 @@ export const playSuccessSound = (comboPitch = 1.0) => {
 };
 
 export const playErrorSound = () => {
+  if (playFile(AUDIO_CONFIG.SOUND_WRONG)) return;
+
   if (!audioCtx) initAudio();
   if (!audioCtx) return;
 
@@ -62,11 +83,10 @@ export const playErrorSound = () => {
   osc.stop(audioCtx.currentTime + 0.3);
 };
 
-export const speak = (text: string) => {
-  // 1. Check if we have a custom audio file for this word
-  if (CUSTOM_AUDIO_MAP[text]) {
-    const audio = new Audio(CUSTOM_AUDIO_MAP[text]);
-    audio.play().catch(e => console.log("Audio play failed", e));
+export const speak = (text: string, itemType?: ItemType) => {
+  // 1. Check Custom Audio File
+  if (itemType && AUDIO_CONFIG.ITEMS[itemType]) {
+    playFile(AUDIO_CONFIG.ITEMS[itemType]);
     return;
   }
 
@@ -82,8 +102,8 @@ export const speak = (text: string) => {
   if (zhVoice) utterance.voice = zhVoice;
   
   utterance.lang = 'zh-CN'; 
-  utterance.rate = 1.4; // Faster
-  utterance.pitch = 1.4; // Higher pitch (female/child-like)
+  utterance.rate = 1.4; 
+  utterance.pitch = 1.4;
   utterance.volume = 1.0;
 
   window.speechSynthesis.speak(utterance);

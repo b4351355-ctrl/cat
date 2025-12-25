@@ -1,11 +1,38 @@
 import { GameItem, ItemType } from './types';
 
-export const INITIAL_TIME_SECONDS = 15; // Start with less time to create urgency
+export const INITIAL_TIME_SECONDS = 15;
 export const GAME_DURATION_SECONDS = 60;
-export const TIME_BONUS_MS = 800; // Add 0.8s per correct answer
-export const TIME_PENALTY_MS = 3000; // Subtract 3s per mistake
 
-// Probability: Carrot/Tissue appear more often (Weight 3), others less (Weight 1)
+// Difficulty Settings
+export const BASE_TIME_BONUS_MS = 800; // Starting bonus
+export const MIN_TIME_BONUS_MS = 100;  // Minimum bonus possible
+export const TIME_DECAY_PER_POINT = 15; // How much the bonus decreases per point
+export const TIME_PENALTY_MS = 3000;   // Penalty for wrong answer
+
+// Audio Paths - REPLACE THESE WITH YOUR UPLOADED FILE URLS
+export const AUDIO_CONFIG = {
+  // If you have uploaded files, paste their URLs here. 
+  // Example: 'https://example.com/audio/carrot.mp3'
+  SOUND_CORRECT: '', // "真棒" sound
+  SOUND_WRONG: '',
+  ITEMS: {
+    [ItemType.CARROT]: '', // "Carrot/Luobo" voice
+    [ItemType.TISSUE]: '', // "Tissue/Zhijin" voice
+    [ItemType.FISH]: '',
+    [ItemType.MOUSE]: '',
+    [ItemType.WATER]: '',
+    [ItemType.PHONE]: '',
+  }
+};
+
+export const RANKS = [
+  { threshold: 0, title: "呆萌猫 (Silly Cat)", message: "还没睡醒吗？😹", color: "text-gray-500" },
+  { threshold: 10, title: "奶牛猫 (Cow Cat)", message: "神经兮兮，偶尔失手 🐄", color: "text-black" },
+  { threshold: 30, title: "大橘猫 (Orange Cat)", message: "为了吃的，拼了！🐱", color: "text-orange-500" },
+  { threshold: 60, title: "黑猫警长 (Sheriff)", message: "眼神犀利，动作敏捷 👮", color: "text-blue-800" },
+  { threshold: 100, title: "猫神 (God of Cats)", message: "人类的手速极限！👑", color: "text-purple-600" }
+];
+
 export const ITEMS: Record<ItemType, GameItem> = {
   [ItemType.CARROT]: {
     type: ItemType.CARROT,
@@ -63,15 +90,5 @@ export const ITEMS: Record<ItemType, GameItem> = {
   }
 };
 
-export const POSITIVE_FEEDBACKS = [
-  "快!", 
-  "好!", 
-  "对!", 
-  "强!"
-];
-
-export const NEGATIVE_FEEDBACKS = [
-  "错啦!",
-  "哎呀!",
-  "笨笨!"
-];
+export const POSITIVE_FEEDBACKS = ["快!", "好!", "对!", "强!"];
+export const NEGATIVE_FEEDBACKS = ["错啦!", "哎呀!", "笨笨!"];
