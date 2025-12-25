@@ -1,0 +1,5 @@
+{
+  "name": "Smart Cat Challenge",
+  "description": "A reflex game based on the viral video. Listen to the command (Carrot or Tissue) and tap the correct item as fast as the smart cat!",
+  "requestFramePermissions": []
+}
