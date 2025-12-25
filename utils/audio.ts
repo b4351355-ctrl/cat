@@ -32,35 +32,62 @@ const playFile = (url: string) => {
   }
 };
 
+// Helper for TTS
+const triggerTTS = (text: string, pitch = 1.5, rate = 1.6) => {
+  if (!window.speechSynthesis) return;
+  
+  const utterance = new SpeechSynthesisUtterance(text);
+  const voices = window.speechSynthesis.getVoices();
+  const zhVoice = voices.find(v => v.lang.includes('zh'));
+  if (zhVoice) utterance.voice = zhVoice;
+  
+  utterance.lang = 'zh-CN'; 
+  utterance.rate = rate; 
+  utterance.pitch = pitch; 
+  utterance.volume = 1.0;
+
+  window.speechSynthesis.speak(utterance);
+};
+
+export const stopAudio = () => {
+  if (window.speechSynthesis) {
+    window.speechSynthesis.cancel();
+  }
+};
+
 export const playSuccessSound = (comboPitch = 1.0) => {
-  // Try playing custom "Great" sound first
+  // 1. Try playing custom file first
   if (playFile(AUDIO_CONFIG.SOUND_CORRECT)) return;
 
-  // Fallback to synth
+  // 2. Play "Zhen Bang" via TTS - Rate set to 2.2 as requested
+  triggerTTS("真棒", 1.6, 2.2); 
+
+  // 3. Play ding sound effect (Web Audio API)
   if (!audioCtx) initAudio();
   if (!audioCtx) return;
 
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
 
-  // Higher pitch for higher combos
-  const baseFreq = 600 * Math.min(1.5, Math.max(1.0, 1 + (comboPitch * 0.05)));
+  const baseFreq = 800 * Math.min(1.5, Math.max(1.0, 1 + (comboPitch * 0.05)));
 
   osc.type = 'sine';
   osc.frequency.setValueAtTime(baseFreq, audioCtx.currentTime);
   osc.frequency.exponentialRampToValueAtTime(baseFreq * 2, audioCtx.currentTime + 0.1);
   
-  gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+  gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
 
   osc.connect(gain);
   gain.connect(audioCtx.destination);
 
   osc.start();
-  osc.stop(audioCtx.currentTime + 0.3);
+  osc.stop(audioCtx.currentTime + 0.2);
 };
 
 export const playErrorSound = () => {
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+
   if (playFile(AUDIO_CONFIG.SOUND_WRONG)) return;
 
   if (!audioCtx) initAudio();
@@ -84,27 +111,10 @@ export const playErrorSound = () => {
 };
 
 export const speak = (text: string, itemType?: ItemType) => {
-  // 1. Check Custom Audio File
   if (itemType && AUDIO_CONFIG.ITEMS[itemType]) {
     playFile(AUDIO_CONFIG.ITEMS[itemType]);
     return;
   }
-
-  // 2. Fallback to Browser TTS
-  if (!window.speechSynthesis) return;
-  
-  window.speechSynthesis.cancel();
-
-  const utterance = new SpeechSynthesisUtterance(text);
-  // Try to find a Chinese voice
-  const voices = window.speechSynthesis.getVoices();
-  const zhVoice = voices.find(v => v.lang.includes('zh'));
-  if (zhVoice) utterance.voice = zhVoice;
-  
-  utterance.lang = 'zh-CN'; 
-  utterance.rate = 1.4; 
-  utterance.pitch = 1.4;
-  utterance.volume = 1.0;
-
-  window.speechSynthesis.speak(utterance);
+  // Speak the item name even faster (raised rate from 2.0 to 2.8)
+  triggerTTS(text, 1.6, 2.8);
 };

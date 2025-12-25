@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { GameState } from './types';
 import { GAME_DURATION_SECONDS } from './constants';
@@ -10,11 +11,15 @@ const App: React.FC = () => {
   const [currentScore, setCurrentScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
 
-  // Load high score from local storage
+  // 加载最高分
   useEffect(() => {
-    const saved = localStorage.getItem('smartCatHighScore');
-    if (saved) {
-      setHighScore(parseInt(saved, 10));
+    try {
+      const saved = localStorage.getItem('smartCatHighScore');
+      if (saved) {
+        setHighScore(parseInt(saved, 10));
+      }
+    } catch (e) {
+      console.error("Storage access failed", e);
     }
   }, []);
 
@@ -29,7 +34,9 @@ const App: React.FC = () => {
     
     if (finalScore > highScore) {
       setHighScore(finalScore);
-      localStorage.setItem('smartCatHighScore', finalScore.toString());
+      try {
+        localStorage.setItem('smartCatHighScore', finalScore.toString());
+      } catch (e) {}
     }
   };
 
@@ -58,11 +65,12 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-orange-50 flex items-center justify-center p-4">
-      {/* Mobile container constraint */}
-      <div className="w-full max-w-md h-[800px] max-h-[90vh] bg-white rounded-3xl shadow-2xl overflow-hidden border-8 border-white ring-4 ring-orange-100 relative">
+    // 适配全屏，移除固定高度限制，增加安全区 padding
+    <div className="fixed inset-0 bg-orange-50 flex flex-col overflow-hidden safe-top safe-bottom">
+      <div className="relative flex-1 w-full max-w-lg mx-auto bg-white shadow-none sm:shadow-2xl overflow-hidden flex flex-col">
+        {/* 背景渐变装饰 */}
         <div className="absolute inset-0 bg-gradient-to-br from-yellow-50 to-orange-50 opacity-50 pointer-events-none"></div>
-        <div className="relative h-full z-10">
+        <div className="relative flex-1 z-10 flex flex-col h-full">
           {renderScreen()}
         </div>
       </div>

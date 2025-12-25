@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { GameItem, ItemType } from '../types';
 import { 
@@ -5,7 +6,10 @@ import {
   BASE_TIME_BONUS_MS, MIN_TIME_BONUS_MS, TIME_DECAY_PER_POINT, TIME_PENALTY_MS 
 } from '../constants';
 import { Volume2, VolumeX, Zap } from 'lucide-react';
-import { speak, playSuccessSound, playErrorSound } from '../utils/audio';
+import { speak, playSuccessSound, playErrorSound, stopAudio } from '../utils/audio';
+
+// 使用用户提供的最新图片 URL
+const catImg = 'https://www.helloimg.com/i/2025/12/25/694d0735e45a4.jpg';
 
 interface GameScreenProps {
   onGameOver: (score: number) => void;
@@ -24,12 +28,12 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onGameOver }) => {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [feedbackType, setFeedbackType] = useState<'success' | 'error' | null>(null);
   const [isMuted, setIsMuted] = useState(false);
-  const [pawState, setPawState] = useState<'idle' | 'left' | 'right'>('idle');
+  const [activePaw, setActivePaw] = useState<'left' | 'right' | null>(null);
+  const [isTransitioning, setIsTransitioning] = useState(false); 
   
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isMutedRef = useRef(isMuted);
 
-  // Helper: Weighted random selection
   const getRandomItems = () => {
     const allItems = Object.values(ITEMS);
     const shuffled = [...allItems].sort(() => 0.5 - Math.random());
@@ -38,7 +42,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onGameOver }) => {
 
   useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
 
-  // Game Loop Logic (Next Round)
   const nextRound = useCallback(() => {
     const [item1, item2] = getRandomItems();
     setLeftItem(item1);
@@ -53,14 +56,15 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onGameOver }) => {
     }
   }, []);
 
-  // Init
   useEffect(() => {
     nextRound();
-  }, [nextRound]);
+    return () => stopAudio();
+  }, []); 
 
-  // High Resolution Timer
   useEffect(() => {
     timerRef.current = setInterval(() => {
+      if (isTransitioning) return;
+
       setTimeLeftMs((prev) => {
         if (prev <= 0) {
           if (timerRef.current) clearInterval(timerRef.current);
@@ -74,31 +78,30 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onGameOver }) => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [onGameOver, score]);
+  }, [onGameOver, score, isTransitioning]);
 
-  // Diminishing Return Logic
   const calculateTimeBonus = (currentScore: number) => {
     const decay = currentScore * TIME_DECAY_PER_POINT;
     return Math.max(MIN_TIME_BONUS_MS, BASE_TIME_BONUS_MS - decay);
   };
 
   const handleInteraction = (selectedType: ItemType) => {
-    if (timeLeftMs <= 0) return;
+    if (timeLeftMs <= 0 || isTransitioning) return;
 
-    // Paw Animation
-    setPawState(selectedType === leftItem.type ? 'left' : 'right');
-    // Reset paw after animation
-    setTimeout(() => setPawState('idle'), 200);
+    setActivePaw(selectedType === leftItem.type ? 'left' : 'right');
+    setTimeout(() => setActivePaw(null), 250);
 
     if (selectedType === targetItem) {
-      // Correct
-      if (!isMuted) playSuccessSound(combo);
+      setIsTransitioning(true); 
+
+      if (!isMuted) {
+        playSuccessSound(combo);
+      }
       
       const newCombo = combo + 1;
       setCombo(newCombo);
       setScore(s => s + 1);
       
-      // Dynamic Bonus Time
       const bonus = calculateTimeBonus(score);
       setTimeLeftMs(prev => Math.min(prev + bonus, 30000));
 
@@ -106,15 +109,14 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onGameOver }) => {
       setFeedback(msg);
       setFeedbackType('success');
       
-      nextRound(); 
-      
       setTimeout(() => {
         setFeedback(null);
         setFeedbackType(null);
-      }, 300);
+        nextRound(); 
+        setIsTransitioning(false); 
+      }, 500); 
 
     } else {
-      // Incorrect
       if (!isMuted) playErrorSound();
       
       setCombo(0);
@@ -125,7 +127,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onGameOver }) => {
       setFeedbackType('error');
 
       if (!isMuted) {
-         setTimeout(() => speak(ITEMS[targetItem].label, targetItem), 200);
+         setTimeout(() => speak(ITEMS[targetItem].label, targetItem), 300);
       }
       
       setTimeout(() => {
@@ -137,13 +139,29 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onGameOver }) => {
 
   const toggleMute = () => setIsMuted(!isMuted);
 
+  const Paw = ({ side, isActive }: { side: 'left' | 'right', isActive: boolean }) => (
+    <div className={`
+      absolute bottom-0 w-12 h-36 bg-white border-4 border-gray-200 rounded-full
+      origin-bottom transition-all duration-150 ease-out z-20 shadow-lg
+      ${side === 'left' ? '-translate-x-16 rotate-[-10deg]' : 'translate-x-16 rotate-[10deg]'}
+      ${isActive ? (side === 'left' ? '-translate-x-28 -translate-y-6 rotate-[-35deg]' : 'translate-x-28 -translate-y-6 rotate-[35deg]') : ''}
+    `} style={{ bottom: '-15%' }}>
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-16 h-14 bg-white border-4 border-gray-200 rounded-full -mt-6 shadow-sm">
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 w-6 h-6 bg-pink-200 rounded-full"></div>
+          <div className="absolute top-1 left-1 w-3 h-3 bg-pink-100 rounded-full"></div>
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3 h-4 bg-pink-100 rounded-full"></div>
+          <div className="absolute top-1 right-1 w-3 h-3 bg-pink-100 rounded-full"></div>
+      </div>
+    </div>
+  );
+
   return (
-    <div className="flex flex-col h-full w-full max-w-md mx-auto relative bg-amber-50 rounded-xl overflow-hidden shadow-2xl">
-      {/* Top Bar */}
-      <div className="flex justify-between items-center p-4 bg-amber-200 text-amber-900 border-b-4 border-amber-300 z-20">
+    <div className="flex flex-col h-full w-full relative">
+      {/* 顶部栏 */}
+      <div className="flex justify-between items-center p-4 bg-amber-200 text-amber-900 border-b-4 border-amber-300 z-20 h-20 shrink-0">
         <div className="flex flex-col">
-          <span className="text-xs uppercase font-bold tracking-wider opacity-70">得分</span>
-          <span className="text-3xl font-black">{score}</span>
+          <span className="text-[10px] uppercase font-bold tracking-wider opacity-70">得分</span>
+          <span className="text-3xl font-black leading-none">{score}</span>
         </div>
         
         <div className="flex items-center gap-2">
@@ -153,73 +171,56 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onGameOver }) => {
                     <span className="text-2xl">x{combo}</span>
                 </div>
             )}
-            <button onClick={toggleMute} className="p-2 rounded-full hover:bg-amber-300/50">
+            <button onClick={toggleMute} className="p-2 rounded-full active:bg-amber-300/50">
             {isMuted ? <VolumeX size={24} /> : <Volume2 size={24} />}
             </button>
         </div>
 
         <div className="flex flex-col items-end">
-          <span className="text-xs uppercase font-bold tracking-wider opacity-70">时间</span>
-          <span className={`text-3xl font-black ${timeLeftMs < 5000 ? 'text-red-600 animate-pulse' : ''}`}>
+          <span className="text-[10px] uppercase font-bold tracking-wider opacity-70">时间</span>
+          <span className={`text-3xl font-black leading-none ${timeLeftMs < 5000 ? 'text-red-600 animate-pulse' : ''}`}>
             {(timeLeftMs / 1000).toFixed(1)}s
           </span>
         </div>
       </div>
 
-      {/* Main Game Area */}
-      <div className="flex-1 flex flex-col items-center justify-center relative p-4 space-y-4">
-        
-        {/* The Prompt Bubble */}
-        <div className="w-full text-center z-10 mb-2 relative">
+      {/* 游戏主体区域 */}
+      <div className="flex-1 flex flex-col items-center justify-start relative p-2 overflow-hidden min-h-0">
+        <div className="w-full text-center z-10 mt-4 h-16 shrink-0">
            <div className={`
-             inline-block bg-white border-4 rounded-3xl px-10 py-6 shadow-lg transform transition-transform duration-100
+             inline-block bg-white border-4 rounded-3xl px-8 py-2 shadow-lg transform transition-transform duration-100
              ${feedbackType === 'error' ? 'shake border-red-500 bg-red-50' : 'border-gray-800'}
-             ${feedbackType === 'success' ? 'scale-105 border-green-500' : ''}
+             ${feedbackType === 'success' ? 'scale-110 border-green-500' : ''}
            `}>
-             <p className="text-gray-400 text-xs font-bold mb-1 uppercase tracking-widest">Cat wants</p>
-             <h2 className="text-5xl font-black text-gray-800 mb-1">
+             <h2 className="text-4xl font-black text-gray-800">
                {ITEMS[targetItem].label}
              </h2>
            </div>
         </div>
 
-        {/* Cat Area with Paw */}
-        <div className="relative w-full flex justify-center h-48 sm:h-56 z-0">
-          
-          {/* Cat Image Container - ensure full head visible */}
+        <div className="relative w-full flex-1 flex flex-col justify-center items-center z-0 min-h-0">
           <div className={`
-            relative w-48 h-48 sm:w-56 sm:h-56 rounded-full border-8 border-white shadow-xl bg-gray-200 
-            transition-transform duration-100
-            ${feedbackType === 'error' ? 'shake grayscale' : ''}
+            relative w-56 h-56 flex items-center justify-center
+            transition-all duration-300
+            ${feedbackType === 'error' ? 'shake grayscale brightness-75' : ''}
+            ${feedbackType === 'success' ? 'scale-105' : ''}
           `}>
-            <img 
-              src="https://picsum.photos/id/40/400/400" 
-              alt="The Cat" 
-              className="w-full h-full object-cover rounded-full" 
-            />
-            
-            {/* The Cat Paw */}
-            <div className={`
-                absolute -bottom-10 left-1/2 w-16 h-24 bg-white border-4 border-gray-300 rounded-full origin-top transition-transform duration-150 ease-out z-20 shadow-md
-                ${pawState === 'left' ? '-rotate-45 -translate-x-12' : ''}
-                ${pawState === 'right' ? 'rotate-45 translate-x-4' : ''}
-                ${pawState === 'idle' ? 'scale-0' : ''}
-            `} style={{ marginLeft: '-2rem' }}>
-                {/* Paw Pads */}
-                <div className="absolute top-2 left-1/2 -translate-x-1/2 w-8 h-6 bg-pink-300 rounded-full"></div>
-                <div className="absolute top-1 left-2 w-3 h-3 bg-pink-300 rounded-full"></div>
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3 h-3 bg-pink-300 rounded-full"></div>
-                <div className="absolute top-1 right-2 w-3 h-3 bg-pink-300 rounded-full"></div>
-            </div>
-
+             <div className="w-full h-full rounded-full border-8 border-white shadow-2xl overflow-hidden relative bg-amber-100">
+                <img 
+                    src={catImg}
+                    alt="Smart Cat" 
+                    className="w-full h-full object-cover" 
+                />
+             </div>
+            <Paw side="left" isActive={activePaw === 'left'} />
+            <Paw side="right" isActive={activePaw === 'right'} />
           </div>
 
-          {/* Feedback Overlay Text */}
           {feedback && (
-            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-64 text-center pointer-events-none pop-in z-30">
+            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full text-center pointer-events-none pop-in z-30">
                <div className={`
-                 px-4 py-2 rounded-full border-4 text-3xl font-black shadow-[0_0_20px_rgba(0,0,0,0.2)] rotate-[-10deg]
-                 ${feedbackType === 'success' ? 'bg-green-400 border-white text-white' : 'bg-red-500 border-white text-white'}
+                 inline-block px-6 py-3 rounded-full border-4 text-4xl font-black shadow-[0_0_20px_rgba(0,0,0,0.3)] rotate-[-5deg]
+                 ${feedbackType === 'success' ? 'bg-green-500 border-white text-white' : 'bg-red-500 border-white text-white'}
                `}>
                  {feedback}
                </div>
@@ -228,30 +229,28 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onGameOver }) => {
         </div>
       </div>
 
-      {/* Controls Area: Random Buttons */}
-      <div className="grid grid-cols-2 gap-4 p-4 bg-white/50 backdrop-blur-sm pb-8">
+      {/* 底部按钮操作区 - 高度固定，按钮更大更适合手指点击 */}
+      <div className="grid grid-cols-2 gap-4 p-4 bg-white/80 backdrop-blur-md pb-10 pt-4 shrink-0 border-t border-amber-100">
         {[leftItem, rightItem].map((item, idx) => (
             <button
             key={`${item.type}-${idx}`}
             onClick={() => handleInteraction(item.type)}
+            disabled={isTransitioning}
             className={`
-                relative group h-48 rounded-3xl border-b-[8px] transition-all active:scale-95 active:border-b-0
-                flex flex-col items-center justify-center shadow-lg
+                relative group h-40 rounded-3xl border-b-8 transition-all active:translate-y-1 active:border-b-0
+                flex flex-col items-center justify-center shadow-lg overflow-hidden
                 ${item.color} 
                 ${item.borderColor}
+                ${isTransitioning ? 'opacity-90' : ''}
             `}
             >
-            <span className="text-7xl mb-2 drop-shadow-md filter group-hover:brightness-110 transition-all">
+            <span className="text-6xl mb-1 drop-shadow-md">
                 {item.emoji}
             </span>
-            <span className="text-white font-black text-3xl drop-shadow-md tracking-wider">
+            <span className="text-white font-black text-2xl drop-shadow-md tracking-wider">
                 {item.label}
             </span>
-            <span className="text-white/60 font-bold text-sm uppercase mt-1">
-                {item.subLabel}
-            </span>
-            
-            <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-white/20 to-transparent rounded-t-3xl"></div>
+            <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-white/20 to-transparent"></div>
             </button>
         ))}
       </div>

@@ -9,15 +9,14 @@ export const MIN_TIME_BONUS_MS = 100;  // Minimum bonus possible
 export const TIME_DECAY_PER_POINT = 15; // How much the bonus decreases per point
 export const TIME_PENALTY_MS = 3000;   // Penalty for wrong answer
 
-// Audio Paths - REPLACE THESE WITH YOUR UPLOADED FILE URLS
+// Audio Paths - REPLACE THESE WITH YOUR UPLOADED FILE URLS IF AVAILABLE
 export const AUDIO_CONFIG = {
-  // If you have uploaded files, paste their URLs here. 
-  // Example: 'https://example.com/audio/carrot.mp3'
-  SOUND_CORRECT: '', // "真棒" sound
+  // If you have real mp3 files, paste their URLs here for best results.
+  SOUND_CORRECT: '', // "Zhen Bang" sound
   SOUND_WRONG: '',
   ITEMS: {
-    [ItemType.CARROT]: '', // "Carrot/Luobo" voice
-    [ItemType.TISSUE]: '', // "Tissue/Zhijin" voice
+    [ItemType.CARROT]: '', 
+    [ItemType.TISSUE]: '', 
     [ItemType.FISH]: '',
     [ItemType.MOUSE]: '',
     [ItemType.WATER]: '',
@@ -90,5 +89,5 @@ export const ITEMS: Record<ItemType, GameItem> = {
   }
 };
 
-export const POSITIVE_FEEDBACKS = ["快!", "好!", "对!", "强!"];
+export const POSITIVE_FEEDBACKS = ["真棒!", "太强了!", "厉害!"];
 export const NEGATIVE_FEEDBACKS = ["错啦!", "哎呀!", "笨笨!"];
